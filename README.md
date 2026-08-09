@@ -1,64 +1,82 @@
-# Agentic Assistant Exercise
+# agent-eval-harness
 
-A minimal project mapping directly to the "Applied AI Engineer" job requirements.
+# 
 
-## Files
+# A tool-calling agent built without a framework, paired with an eval suite that scores non-deterministic output on properties rather than exact strings.
 
-| File | What it teaches | Job requirement it hits |
-|---|---|---|
-| `agent.py` | Anthropic API tool use + the agent loop | OpenAI/Anthropic API, AI agents, prompt design, context management, multi-step workflows |
-| `test_agent.py` | Unit tests on deterministic logic | Unit testing, safely validating AI-adjacent code |
-| `eval_suite.py` | Scoring non-deterministic LLM output | Evaluation frameworks for AI outputs, AI-driven testing/reliability |
+# 
 
-## How to run it
+# The agent loop is roughly forty lines: call the model, run any tool it requests, feed the result back, repeat until it returns text. No LangChain, no LangGraph. The point is to show what those frameworks are wrapping.
 
-```bash
-# 1. Unit tests — fast, free, no API key needed
-pip install anthropic pytest
-python3 -m pytest test_agent.py -v
+# 
 
-# 2. The agent itself — needs an API key, costs a few cents
-export ANTHROPIC_API_KEY="sk-ant-..."
-python3 agent.py
+# Why it's built this way
 
-# 3. The eval suite — runs 4 labeled cases against the live agent
-python3 eval_suite.py
-```
+# 
 
-## Why this structure, not just a chatbot script
+# Most agent projects are a chatbot script with tools bolted on, and they have no way to tell you whether a change made things better or worse. Three decisions address that:
 
-The job wants someone who treats AI output as **a system to be engineered**,
-not a black box you hope works. Concretely that means:
+# 
 
-1. **Separate deterministic code from probabilistic code.** Your tool
-   functions (`run_calculator`, `run_lookup`) are pure functions — test them
-   like any other code, with exact assertions, no API calls, in milliseconds.
-2. **Never assert exact strings on LLM output.** The eval suite checks
-   *properties* ("does the answer contain the right fact / call the right
-   tool / admit uncertainty") instead of exact wording, because wording
-   varies between runs even at temperature 0 in practice.
-3. **Name failure modes, not just pass/fail.** Each eval case states what a
-   failure *means* (hallucination vs. wrong tool vs. arithmetic error) so a
-   failing run tells you what to fix, not just that something broke.
-4. **The agent loop is the core mechanic.** Strip away LangChain and this is
-   maybe 40 lines: call model → if it wants a tool, run it and feed the
-   result back → repeat → return final text. Once you've built this raw
-   once, every agent framework (LangGraph, CrewAI, etc.) is just sugar on
-   top of it — which is exactly the kind of "I understand what's underneath
-   the abstraction" signal this job is testing for.
+# Deterministic code is separated from probabilistic code. The tool functions (run\_calculator, run\_lookup) are pure functions with no API calls. They're unit-tested with exact assertions and run in milliseconds. Only the model's behaviour goes through the eval suite.
 
-## Where to take it next (closes remaining gaps fast)
+# 
 
-- **Swap the calculator/lookup for something real** — wire `lookup` to your
-  existing ChromaDB resume index instead of the fake dict. Now it's RAG +
-  agent in one project, and directly reuses your existing portfolio piece.
-- **Add a `web_search` tool** using the `requests` library against a real
-  API. Now you have 3 tools and the model has to choose between them —
-  this is what "navigate ambiguity" in the posting is actually testing.
-- **Add latency/cost logging** around each `client.messages.create` call
-  (track tokens used, wall-clock time per step). That's the "optimizing
-  performance (latency, cost)" bullet, made concrete.
-- **Push to GitHub as its own repo** with this README. It's small,
-  finishable in one sitting, and demonstrates 6 of the ~10 hard
-  requirements on that posting — strong portfolio addition next to the
-  RAG chatbot.
+# Evals assert properties, not strings. Checking that output matches expected text fails constantly — wording varies between runs even at temperature 0. The suite checks whether the answer contains the right fact, whether the correct tool was selected, and whether the model admits uncertainty instead of inventing an answer.
+
+# 
+
+# Each eval case names its failure mode. A case doesn't just pass or fail; it distinguishes hallucination from wrong-tool-selection from arithmetic error. A red run tells you what to fix, not just that something broke.
+
+# 
+
+# Structure
+
+# File	Purpose
+
+# agent.py	Tool definitions and the agent loop
+
+# test\_agent.py	Unit tests on tool functions — deterministic, no API key required
+
+# eval\_suite.py	Four labeled cases scored against the live agent
+
+# Running it
+
+# bash
+
+# pip install anthropic pytest
+
+# 
+
+# \# Unit tests — fast, free, no API key
+
+# python -m pytest test\_agent.py -v
+
+# 
+
+# \# The agent — requires an API key, costs a few cents per run
+
+# cp .env.example .env    # add your key
+
+# python agent.py
+
+# 
+
+# \# Eval suite — four cases against the live agent
+
+# python eval\_suite.py
+
+# Current limitations
+
+# Two tools is a low bar for routing. With only a calculator and a lookup, tool selection is close to trivial. A third tool with overlapping scope would make the routing decision meaningful and the evals more informative.
+
+# run\_lookup reads from a static dictionary, not a real index. Pointing it at a vector store would make retrieval quality something the evals could actually measure.
+
+# No latency or cost instrumentation. Token counts and wall-clock time per step aren't tracked, so there's no way to catch a change that improves accuracy while tripling cost.
+
+# Stack
+
+# 
+
+# Python · Anthropic API · pytest
+
