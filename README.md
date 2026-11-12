@@ -1,82 +1,62 @@
-# agent-eval-harness
+# Agent Eval Harness
 
-# 
+A small tool-calling agent built directly on the Anthropic SDK, with deterministic tool tests and a separate four-case live evaluation suite.
 
-# A tool-calling agent built without a framework, paired with an eval suite that scores non-deterministic output on properties rather than exact strings.
+## How it works
 
-# 
+The agent sends a question to the model, executes requested tools, returns tool results and repeats for up to five steps. Three tools are registered:
 
-# The agent loop is roughly forty lines: call the model, run any tool it requests, feed the result back, repeat until it returns text. No LangChain, no LangGraph. The point is to show what those frameworks are wrapping.
+| Tool | Implementation |
+|---|---|
+| Calculator | Character-restricted arithmetic evaluation |
+| Lookup | A small static company-facts dictionary |
+| Resume lookup | PDF text chunks, OpenAI embeddings and an in-memory Chroma index |
 
-# 
+The evaluation suite checks answer properties: arithmetic, a founding-year comparison, a known fact and acknowledgment of missing knowledge-base information. It checks final answer text, **not the actual tool-call trace**, so a pass does not prove that the correct tool was used.
 
-# Why it's built this way
+## Setup
 
-# 
+From the repository root, in a Python virtual environment:
 
-# Most agent projects are a chatbot script with tools bolted on, and they have no way to tell you whether a change made things better or worse. Three decisions address that:
+```powershell
+python -m pip install anthropic python-dotenv pypdf chromadb openai pytest
+Copy-Item .env.example .env
+```
 
-# 
+Set `ANTHROPIC_API_KEY` and `OPENAI_API_KEY` locally. For resume questions, supply your own PDF and update `PDF_PATH` in `resume_rag.py`; the configured resume file is not committed. PDF chunks are sent to OpenAI for embedding and retrieved text is passed to the agent.
 
-# Deterministic code is separated from probabilistic code. The tool functions (run\_calculator, run\_lookup) are pure functions with no API calls. They're unit-tested with exact assertions and run in milliseconds. Only the model's behaviour goes through the eval suite.
+## Run
 
-# 
+```powershell
+python agent.py
+python eval_suite.py
+```
 
-# Evals assert properties, not strings. Checking that output matches expected text fails constantly — wording varies between runs even at temperature 0. The suite checks whether the answer contains the right fact, whether the correct tool was selected, and whether the model admits uncertainty instead of inventing an answer.
+Both commands call a live model and incur API usage. Resume retrieval additionally calls the embedding API.
 
-# 
+## Unit tests without model calls
 
-# Each eval case names its failure mode. A case doesn't just pass or fail; it distinguishes hallucination from wrong-tool-selection from arithmetic error. A red run tells you what to fix, not just that something broke.
+The current modules create API clients during import, so the test process still needs nonempty key values. For offline unit tests, temporary dummy values are sufficient:
 
-# 
+```powershell
+$env:ANTHROPIC_API_KEY = "unit-test-placeholder"
+$env:OPENAI_API_KEY = "unit-test-placeholder"
+python -m pytest test_agent.py -v
+Remove-Item Env:ANTHROPIC_API_KEY
+Remove-Item Env:OPENAI_API_KEY
+```
 
-# Structure
+Use a separate test terminal so these temporary values do not replace credentials in your live-run terminal. The checked-in tests exercise calculator behavior, dictionary lookup, tool registration and chunking assumptions; they do not call the model.
 
-# File	Purpose
+## Files
 
-# agent.py	Tool definitions and the agent loop
+| File | Purpose |
+|---|---|
+| `agent.py` | Tool definitions and agent loop |
+| `resume_rag.py` | PDF retrieval tool |
+| `test_agent.py` | Deterministic tests |
+| `eval_suite.py` | Four live answer-property checks |
 
-# test\_agent.py	Unit tests on tool functions — deterministic, no API key required
+## Limitations
 
-# eval\_suite.py	Four labeled cases scored against the live agent
-
-# Running it
-
-# bash
-
-# pip install anthropic pytest
-
-# 
-
-# \# Unit tests — fast, free, no API key
-
-# python -m pytest test\_agent.py -v
-
-# 
-
-# \# The agent — requires an API key, costs a few cents per run
-
-# cp .env.example .env    # add your key
-
-# python agent.py
-
-# 
-
-# \# Eval suite — four cases against the live agent
-
-# python eval\_suite.py
-
-# Current limitations
-
-# Two tools is a low bar for routing. With only a calculator and a lookup, tool selection is close to trivial. A third tool with overlapping scope would make the routing decision meaningful and the evals more informative.
-
-# run\_lookup reads from a static dictionary, not a real index. Pointing it at a vector store would make retrieval quality something the evals could actually measure.
-
-# No latency or cost instrumentation. Token counts and wall-clock time per step aren't tracked, so there's no way to catch a change that improves accuracy while tripling cost.
-
-# Stack
-
-# 
-
-# Python · Anthropic API · pytest
-
+This is a learning prototype, with a tiny evaluation set, static lookup data and no token/cost instrumentation. The calculator's character filter is not a resource-use sandbox. Dependencies are not pinned in a requirements file. Resume retrieval is not covered by the four live evaluation cases, and the suite's printed results are not a production release gate.
